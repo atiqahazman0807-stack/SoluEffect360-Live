@@ -7692,6 +7692,7 @@ input[type="range"]::-moz-range-thumb {
 .soluai-context-pill{display:inline-flex;align-items:center;gap:5px;min-width:0;max-width:100%;font-size:9.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#475569;background:#fff;border:1px solid rgba(148,163,184,.18);border-radius:999px;padding:5px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dark .soluai-context-pill{color:#cbd5e1;background:#131e32;border-color:rgba(255,255,255,.07)}
 .soluai-messages{flex:1;overflow-y:auto;padding:16px 14px 10px;scroll-behavior:smooth;background:radial-gradient(circle at 8% 0%,rgba(37,99,235,.035),transparent 30%),radial-gradient(circle at 100% 25%,rgba(124,58,237,.035),transparent 28%)}
 .soluai-message{display:flex;gap:8px;margin-bottom:12px;align-items:flex-end}.soluai-message.user{justify-content:flex-end}.soluai-bubble{max-width:84%;padding:10px 12px;border-radius:15px;font-size:12px;line-height:1.55;white-space:pre-wrap;word-break:break-word}.soluai-message.assistant .soluai-bubble{background:#f1f5f9;color:#334155;border-bottom-left-radius:5px;border:1px solid rgba(148,163,184,.10)}.dark .soluai-message.assistant .soluai-bubble{background:#131e32;color:#e2e8f0;border-color:rgba(255,255,255,.04)}.soluai-message.user .soluai-bubble{background:linear-gradient(135deg,#2563eb,#6d28d9);color:#fff;border-bottom-right-radius:5px;box-shadow:0 8px 18px rgba(37,99,235,.12)}
+.soluai-message.assistant .soluai-bubble{white-space:normal}.soluai-math{max-width:100%}.soluai-math-block{display:block;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;padding:2px 0}.soluai-bubble mjx-container{max-width:100%;font-size:1em!important}.soluai-bubble mjx-container[display="true"]{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;margin:.55em 0!important;padding:.1em 0}.soluai-bubble mjx-container[display="true"]::-webkit-scrollbar{height:3px}.soluai-bubble mjx-container[display="true"]::-webkit-scrollbar-thumb{background:rgba(148,163,184,.35);border-radius:999px}
 .soluai-mini-avatar{width:24px;height:24px;flex:none;border-radius:9px;background:linear-gradient(135deg,#2563eb,#7c3aed);color:#fff;display:flex;align-items:center;justify-content:center;margin-bottom:1px}
 .soluai-typing{display:flex;gap:4px;align-items:center;height:17px}.soluai-typing span{width:5px;height:5px;border-radius:50%;background:#94a3b8;animation:soluaiDot 1.1s infinite ease-in-out}.soluai-typing span:nth-child(2){animation-delay:.16s}.soluai-typing span:nth-child(3){animation-delay:.32s}@keyframes soluaiDot{0%,60%,100%{transform:translateY(0);opacity:.45}30%{transform:translateY(-4px);opacity:1}}
 .soluai-quick-wrap{padding:7px 12px 9px;border-top:1px solid rgba(148,163,184,.10);display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}.soluai-quick-wrap::-webkit-scrollbar{display:none}.dark .soluai-quick-wrap{border-top-color:rgba(255,255,255,.05)}
@@ -14932,6 +14933,23 @@ window.SOLUAI_ENDPOINT = "https://solu-effect360-solu-ai-backend.vercel.app/api/
   const lang=()=>document.documentElement.lang==='ms'?'ms':'en'; const tr=(k)=>T[lang()][k]||T.en[k]||k;
   const escapeHtml=(s)=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
   function renderText(s){ return escapeHtml(s).replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/`([^`]+)`/g,'<code style="font-size:.92em;background:rgba(148,163,184,.14);padding:1px 4px;border-radius:5px">$1</code>').replace(/\n/g,'<br>'); }
+  function renderAssistantText(s){
+    const maths=[];
+    let safe=String(s??'').replace(/\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)/g,(m)=>{const key=`@@SOLUAIMATH${maths.length}@@`;maths.push(m);return key;});
+    safe=renderText(safe);
+    maths.forEach((m,i)=>{
+      const key=`@@SOLUAIMATH${i}@@`;
+      const block=m.startsWith('\\[');
+      const html=`<${block?'div':'span'} class="soluai-math${block?' soluai-math-block':''}">${escapeHtml(m)}</${block?'div':'span'}>`;
+      safe=safe.replace(key,html);
+    });
+    return safe;
+  }
+  function typesetSoluAI(node){
+    if(!node||!window.MathJax?.typesetPromise)return;
+    try{window.MathJax.typesetClear?.([node]);}catch(_){}
+    requestAnimationFrame(()=>window.MathJax?.typesetPromise?.([node]).catch(()=>{}));
+  }
   function endpoint(){ return (localStorage.getItem('soluai_endpoint')||window.SOLUAI_ENDPOINT||'').trim().replace(/\/$/,''); }
   function examActive(){ const sec=$('#exam-practice-section'), game=$('#qa-exam-game'); return !!(sec && !sec.classList.contains('hidden') && game && !game.classList.contains('hidden')); }
   function visible(el){return !!el && !el.classList.contains('hidden') && el.offsetParent!==null;}
@@ -14962,7 +14980,7 @@ window.SOLUAI_ENDPOINT = "https://solu-effect360-solu-ai-backend.vercel.app/api/
     input.disabled=locked||busy; send.disabled=locked||busy||!input.value.trim();
     $('#soluai-setup-title').textContent=tr('setupTitle'); $('#soluai-setup-copy').textContent=tr('setupCopy'); $('#soluai-endpoint-label').textContent=tr('endpointLabel'); clearEndpoint.textContent=tr('clear'); saveEndpoint.textContent=tr('save'); $('#soluai-setup-note').textContent=tr('setupNote');
   }
-  function addMessage(role,text,opts={}){ const row=document.createElement('div');row.className=`soluai-message ${role}`; if(role==='assistant')row.innerHTML=`<div class="soluai-mini-avatar"><i data-lucide="sparkles" style="width:12px;height:12px"></i></div><div class="soluai-bubble">${opts.html||renderText(text)}</div>`; else row.innerHTML=`<div class="soluai-bubble">${renderText(text)}</div>`; messages.appendChild(row); try{window.lucide?.createIcons?.()}catch(_){} messages.scrollTop=messages.scrollHeight; return row; }
+  function addMessage(role,text,opts={}){ const row=document.createElement('div');row.className=`soluai-message ${role}`; if(role==='assistant')row.innerHTML=`<div class="soluai-mini-avatar"><i data-lucide="sparkles" style="width:12px;height:12px"></i></div><div class="soluai-bubble">${opts.html||renderAssistantText(text)}</div>`; else row.innerHTML=`<div class="soluai-bubble">${renderText(text)}</div>`; messages.appendChild(row); try{window.lucide?.createIcons?.()}catch(_){} if(role==='assistant'&&!opts.html)typesetSoluAI(row.querySelector('.soluai-bubble')); messages.scrollTop=messages.scrollHeight; return row; }
   function typing(){return addMessage('assistant','',{html:'<div class="soluai-typing"><span></span><span></span><span></span></div>'});}
   function localGuide(kind,c){ const ms=lang()==='ms'; const topic=c.topicId;
     if(c.page!=='Learn') return ms?'Buka salah satu modul pembelajaran supaya saya boleh menerangkan simulasi dan formula berdasarkan nilai semasa.':'Open one of the learning modules so I can explain the simulation and formula using the current values.';
